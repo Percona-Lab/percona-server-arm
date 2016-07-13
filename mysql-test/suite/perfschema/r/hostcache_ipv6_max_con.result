@@ -1,4 +1,5 @@
 call mtr.add_suppression("Too many connections");
+# restart: --bind-address=::
 flush status;
 flush hosts;
 flush user_resources;

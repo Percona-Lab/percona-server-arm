@@ -54,34 +54,31 @@ Created 1/20/1994 Heikki Tuuri
 typedef time_t	ib_time_t;
 
 #ifndef UNIV_HOTBACKUP
-# if defined(HAVE_PAUSE_INSTRUCTION)
-   /* According to the gcc info page, asm volatile means that the
-   instruction has important side-effects and must not be removed.
-   Also asm volatile may trigger a memory barrier (spilling all registers
-   to memory). */
-#  ifdef __SUNPRO_CC
-#   define UT_RELAX_CPU() asm ("pause" )
-#  else
-#   define UT_RELAX_CPU() __asm__ __volatile__ ("pause")
-#  endif /* __SUNPRO_CC */
 
-# elif defined(HAVE_FAKE_PAUSE_INSTRUCTION)
-#  define UT_RELAX_CPU() __asm__ __volatile__ ("rep; nop")
-# elif defined _WIN32
-   /* In the Win32 API, the x86 PAUSE instruction is executed by calling
-   the YieldProcessor macro defined in WinNT.h. It is a CPU architecture-
-   independent way by using YieldProcessor. */
-#  define UT_RELAX_CPU() YieldProcessor()
+#include <my_atomic.h>
+
+# ifdef MY_PAUSE
+#  define UT_RELAX_CPU() MY_PAUSE()
 # else
-#  define UT_RELAX_CPU() __asm__ __volatile__ ("":::"memory")
+#  error MY_PAUSE() is undefined
 # endif
 
-# if defined(HAVE_HMT_PRIORITY_INSTRUCTION)
-#  define UT_LOW_PRIORITY_CPU() __asm__ __volatile__ ("or 1,1,1")
-#  define UT_RESUME_PRIORITY_CPU() __asm__ __volatile__ ("or 2,2,2")
+#ifdef MY_LOW_PRIORITY_CPU
+#  define UT_LOW_PRIORITY_CPU() MY_LOW_PRIORITY_CPU()
+#else
+#  error MY_LOW_PRIORITY_CPU() is undefined!
+#endif
+
+#ifdef MY_RESUME_PRIORITY_CPU
+#  define UT_RESUME_PRIORITY_CPU() MY_RESUME_PRIORITY_CPU()
+#else
+#  error MY_RESUME_PRIORITY_CPU() is undefined!
+#endif
+
+# ifdef MY_COMPILER_BARRIER
+#  define UT_COMPILER_BARRIER() MY_COMPILER_BARRIER()
 # else
-#  define UT_LOW_PRIORITY_CPU() ((void)0)
-#  define UT_RESUME_PRIORITY_CPU() ((void)0)
+#  error MY_COMPILER_BARRIER() is undefined!
 # endif
 
 /*********************************************************************//**
@@ -317,7 +314,7 @@ ut_get_year_month_day(
 Runs an idle loop on CPU. The argument gives the desired delay
 in microseconds on 100 MHz Pentium + Visual C++.
 @return dummy value */
-ulint
+void
 ut_delay(
 /*=====*/
 	ulint	delay);	/*!< in: delay in microseconds on 100 MHz Pentium */

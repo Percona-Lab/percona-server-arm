@@ -77,7 +77,8 @@ Created 11/5/1995 Heikki Tuuri
 #include <map>
 #include <sstream>
 
-#if defined(HAVE_LIBNUMA) && defined(WITH_NUMA) && !defined(UNIV_INNOCHECKSUM)
+#if defined(HAVE_LIBNUMA) && defined(WITH_NUMA) && \
+	!defined(UNIV_HOTBACKUP) && !defined(UNIV_INNOCHECKSUM)
 #include <numa.h>
 #include <numaif.h>
 
@@ -118,7 +119,7 @@ struct set_numa_interleave_t
 #define NUMA_MEMPOLICY_INTERLEAVE_IN_SCOPE set_numa_interleave_t scoped_numa
 #else
 #define NUMA_MEMPOLICY_INTERLEAVE_IN_SCOPE
-#endif /* HAVE_LIBNUMA && WITH_NUMA */
+#endif /* HAVE_LIBNUMA && !UNIV_HOTBACKUP && !UNIV_INNOCHECKSUM */
 
 #ifndef UNIV_INNOCHECKSUM
 
@@ -1506,7 +1507,7 @@ buf_chunk_init(
 		return(NULL);
 	}
 
-#if defined(HAVE_LIBNUMA) && defined(WITH_NUMA)
+#if defined(HAVE_LIBNUMA)
 	if (srv_numa_interleave) {
 		int	st = mbind(chunk->mem, chunk->mem_size(),
 				   MPOL_INTERLEAVE,
@@ -1519,7 +1520,7 @@ buf_chunk_init(
 				" (error: " << strerror(errno) << ").";
 		}
 	}
-#endif /* HAVE_LIBNUMA && WITH_NUMA */
+#endif /* HAVE_LIBNUMA */
 
 
 	/* Allocate the block descriptors from
@@ -3943,14 +3944,18 @@ buf_block_from_ahi(const byte* ptr)
 	ut_ad(buf_chunk_map_ref == buf_chunk_map_reg);
 	ut_ad(!buf_pool_resizing);
 
-	const byte* bound = reinterpret_cast<uintptr_t>(ptr)
-			    > srv_buf_pool_chunk_unit
-			    ? ptr - srv_buf_pool_chunk_unit : 0;
-	it = chunk_map->upper_bound(bound);
+	buf_chunk_t*		chunk;
 
-	ut_a(it != chunk_map->end());
+	it = chunk_map->upper_bound(ptr);
 
-	buf_chunk_t*	chunk = it->second;
+	ut_a(it != chunk_map->begin());
+
+	if (it == chunk_map->end()) {
+		chunk = chunk_map->rbegin()->second;
+	} else {
+		chunk = (--it)->second;
+	}
+
 	ulint		offs = ptr - chunk->blocks->frame;
 
 	offs >>= UNIV_PAGE_SIZE_SHIFT;
